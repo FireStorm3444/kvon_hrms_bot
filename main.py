@@ -33,11 +33,12 @@ def run_workflow(action: AttendanceAction, is_automated: bool):
     if is_automated:
         delay = random.randint(0, 900)  # Up to 15 minutes
         logging.info("Scheduled to %s after %s seconds...", action.value, delay)
+        notifier.send_alert(f"Automated {action.value} will be attempted in {delay} seconds.")
         time.sleep(delay)
 
     # 2. Authenticate
-    sucess, message = hrms.login()
-    if not sucess:
+    success, message = hrms.login()
+    if not success:
         notifier.send_alert(f"Failed to login for {action.value}: {message}")
         return
 
