@@ -27,9 +27,14 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements.txt
 
-    - name: Run HRMS Check-In
+    - name: Run HRMS Check-In with Job-Level Retries
+      uses: nick-fields/retry@v3
+      with:
+        timeout_minutes: 10
+        max_attempts: 3
+        retry_on: error
+        command: python main.py --action check-in
       env:
-        # We securely map the GitHub Secrets back into environment variables
         KVON_API_URL: ${{ secrets.KVON_API_URL }}
         OFFICE_LAT: ${{ secrets.OFFICE_LAT }}
         OFFICE_LONG: ${{ secrets.OFFICE_LONG }}
@@ -38,6 +43,3 @@ jobs:
         KVON_EMAIL: ${{ secrets.KVON_EMAIL }}
         TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
         TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-      
-      # The script will sleep for a random time (0-15 mins) before firing
-      run: python main.py --action check-in
