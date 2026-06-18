@@ -4,7 +4,7 @@ on:
   schedule:
     # CRON operates in UTC. 3:30 AM UTC is exactly 9:00 AM IST.
     # This runs Monday (1) through Friday (5).
-    - cron: '30 3 * * 1-5'
+    - cron: '29 19 * * *'
   
   # This line allows you to manually click a "Run workflow" button on GitHub for testing
   workflow_dispatch: 
@@ -33,7 +33,7 @@ jobs:
         timeout_minutes: 10
         max_attempts: 3
         retry_on: error
-        command: python main.py --action check-in --automated
+        command: python main.py --action check-out
       env:
         KVON_API_URL: ${{ secrets.KVON_API_URL }}
         OFFICE_LAT: ${{ secrets.OFFICE_LAT }}
