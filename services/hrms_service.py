@@ -75,10 +75,10 @@ class HRMSService:
             response = self.api.post(f"/attendance/{action.value}", payload)
             if response.status_code in [200, 201]:
                 logging.info("✅ %s successful.", action_name)
-                return True
+                return True, response.text
                 
             logging.warning("❌ %s rejected: %s", action_name, response.text)
-            return False
+            return False, response.text
         except Exception as e:
             logging.error("❌ %s request failed: %s", action_name, e)
-            return False
+            return False, str(e)
