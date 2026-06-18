@@ -9,6 +9,12 @@ class AttendanceAction(str, Enum):
     CHECK_IN = "check-in"
     CHECK_OUT = "check-out"
 
+class api_endpoints(str, Enum):
+    LOGIN = "/auth/login"
+    TIMESHEET_BULK = "/timesheets/bulk"
+    ATTENDANCE_CHECK_IN = "/attendance/check-in"
+    ATTENDANCE_CHECK_OUT = "/attendance/check-out"
+
 class HRMSService:
     def __init__(self, config: Config, api_client: APIClient):
         self.config = config
@@ -23,7 +29,7 @@ class HRMSService:
         }
         
         try:
-            response = self.api.post("/auth/login", payload)
+            response = self.api.post(api_endpoints.LOGIN.value, payload)
             response.raise_for_status()
             data = response.json()
             
@@ -54,7 +60,7 @@ class HRMSService:
 
         logging.info("📝 Submitting timesheet for %s...", today_str)
         try:
-            response = self.api.post("/timesheets/bulk", payload)
+            response = self.api.post(api_endpoints.TIMESHEET_BULK.value, payload)
             if response.status_code in [200, 201]:
                 logging.info("✅ Timesheet logged successfully.")
                 return True
@@ -72,7 +78,7 @@ class HRMSService:
         
         logging.info("📍 Sending %s payload: %s, %s", action.value, lat, long)
         try:
-            response = self.api.post(f"/attendance/{action.value}", payload)
+            response = self.api.post(api_endpoints.ATTENDANCE_CHECK_IN.value if action == AttendanceAction.CHECK_IN else api_endpoints.ATTENDANCE_CHECK_OUT.value, payload)
             text = response.text
             if response.status_code in [200, 201]:
                 logging.info("✅ %s successful.", action_name)
