@@ -31,7 +31,7 @@ def run_workflow(action: AttendanceAction, is_automated: bool):
 
     # 1. Apply organic delay for automated morning check-ins
     if is_automated:
-        delay = random.randint(0, 2)
+        delay = random.randint(0, 900)  # Up to 15 minutes
         logging.info("Scheduled to %s after %s seconds...", action.value, delay)
         time.sleep(delay)
 
