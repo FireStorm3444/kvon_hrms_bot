@@ -38,7 +38,7 @@ def run_workflow(action: AttendanceAction, is_automated: bool):
     # 2. Authenticate
     sucess, message = hrms.login()
     if not sucess:
-        notifier.send_alert(f"Failed to login for {action.value}: {message}")
+        notifier.send_alert(f"Failed to login for {action.value}: {message.get('details', message)}")
         return
 
     # 3. Handle Timesheet for Check-out
@@ -66,9 +66,9 @@ def run_workflow(action: AttendanceAction, is_automated: bool):
     # 4. Execute Attendance
     success, message = hrms.submit_attendance(action)
     if success:
-        notifier.send_alert(f"Successfully executed {action.value}: {message}")
+        notifier.send_alert(f"Successfully executed {action.value}: {message.get('details', message)}")
     else:
-        notifier.send_alert(f"Failed to execute {action.value}: {message}")
+        notifier.send_alert(f"Failed to execute {action.value}: {message.get('details', message)}")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="KvonTech Automated HRMS")
