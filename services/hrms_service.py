@@ -39,7 +39,7 @@ class HRMSService:
             
         except Exception as e:
             logging.error("❌ Login failed: %s", e)
-            return False, e.get("details", str(e)) if isinstance(e, dict) else str(e)
+            return False, str(e)
 
     def submit_timesheet(self, task_name: str, task_details: str, mentor_name: str, start_time: str, end_time: str) -> bool:
         today_str = datetime.today().strftime("%Y-%m-%d")
@@ -74,13 +74,12 @@ class HRMSService:
         try:
             response = self.api.post(f"/attendance/{action.value}", payload)
             text = response.text
-            details = text.get('details', text) if isinstance(text, dict) else text
             if response.status_code in [200, 201]:
                 logging.info("✅ %s successful.", action_name)
                 return True
                 
-            logging.warning("❌ %s rejected: %s", action_name, details)
-            return False, details
+            logging.warning("❌ %s rejected: %s", action_name, text)
+            return False, text
         except Exception as e:
             logging.error("❌ %s request failed: %s", action_name, e)
             return False, str(e)
