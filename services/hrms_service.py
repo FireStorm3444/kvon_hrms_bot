@@ -32,14 +32,14 @@ class HRMSService:
             if token:
                 self.api.set_bearer_token(token)
                 logging.info("✅ Authentication successful.")
-                return True
+                return True, "Authentication successful"
             
             logging.error("❌ Failed to extract token. API returned: %s", data)
-            return False
+            return False, "Failed to extract token"
             
         except Exception as e:
             logging.error("❌ Login failed: %s", e)
-            return False
+            return False, str(e)
 
     def submit_timesheet(self, task_name: str, task_details: str, mentor_name: str, start_time: str, end_time: str) -> bool:
         today_str = datetime.today().strftime("%Y-%m-%d")

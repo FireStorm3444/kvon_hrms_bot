@@ -36,8 +36,9 @@ def run_workflow(action: AttendanceAction, is_automated: bool):
         time.sleep(delay)
 
     # 2. Authenticate
-    if not hrms.login():
-        notifier.send_alert(f"Failed to login for {action.value}")
+    sucess, message = hrms.login()
+    if not sucess:
+        notifier.send_alert(f"Failed to login for {action.value}: {message}")
         return
 
     # 3. Handle Timesheet for Check-out
