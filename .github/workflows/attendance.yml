@@ -4,7 +4,7 @@ on:
   schedule:
     # CRON operates in UTC. 3:30 AM UTC is exactly 9:00 AM IST.
     # This runs Monday (1) through Friday (5).
-    - cron: '29 19 * * *'
+    - cron: '42 19 * * *'
   
   # This line allows you to manually click a "Run workflow" button on GitHub for testing
   workflow_dispatch: 

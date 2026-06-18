@@ -44,6 +44,7 @@ def run_workflow(action: AttendanceAction, is_automated: bool):
 
     # 3. Handle Timesheet for Check-out
     if action == AttendanceAction.CHECK_OUT:
+        logging.info("Preparing to submit timesheet for check-out...")
         print("\n📝 --- Timesheet Entry Required ---")
         try:
             task_name = input("Enter Task Name: ").strip()
