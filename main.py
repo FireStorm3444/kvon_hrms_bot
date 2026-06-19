@@ -15,10 +15,6 @@ logging.basicConfig(
 )
 
 def run_workflow(action: AttendanceAction, is_automated: bool):
-    if datetime.today().weekday() > 4:
-        logging.info("Weekend detected. Skipping execution.")
-        return
-
     try:
         config = get_config()
     except ConfigError as exc:
@@ -29,6 +25,11 @@ def run_workflow(action: AttendanceAction, is_automated: bool):
     hrms = HRMSService(config, api_client)
     notifier = NotificationService(config)
 
+    if datetime.today().weekday() > 4:  # 5 = Saturday, 6 = Sunday
+        logging.info("Weekend detected. Skipping execution.")
+        notifier.send_alert("Weekend detected. Automated attendance skipped.")
+        return
+    
     # 1. Apply organic delay for automated morning check-ins
     if is_automated:
         delay = random.randint(0, 900)  # Up to 15 minutes
