@@ -28,7 +28,7 @@ jobs:
         timeout_minutes: 10
         max_attempts: 3
         retry_on: error
-        command: python main.py --action check-in
+        command: python main.py --action check-in --automated
       env:
         KVON_API_URL: ${{ secrets.KVON_API_URL }}
         OFFICE_LAT: ${{ secrets.OFFICE_LAT }}
