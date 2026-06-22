@@ -1,8 +1,12 @@
 from __future__ import annotations
 
 import os
+import logging
 from dataclasses import dataclass
 from pathlib import Path
+
+
+logger = logging.getLogger(__name__)
 
 
 class ConfigError(ValueError):
@@ -24,8 +28,10 @@ class Config:
 def load_dotenv(path: str | Path = ".env") -> None:
     env_path = Path(path)
     if not env_path.exists():
+        logger.debug("Environment file not found at %s; using process environment.", env_path)
         return
 
+    loaded_keys = []
     for raw_line in env_path.read_text(encoding="utf-8").splitlines():
         line = raw_line.strip()
         if not line or line.startswith("#") or "=" not in line:
@@ -37,6 +43,9 @@ def load_dotenv(path: str | Path = ".env") -> None:
 
         if key and key not in os.environ:
             os.environ[key] = value
+            loaded_keys.append(key)
+
+    logger.debug("Loaded %s environment values from %s.", len(loaded_keys), env_path)
 
 
 def get_config(env_file: str | Path = ".env") -> Config:
@@ -54,14 +63,17 @@ def get_config(env_file: str | Path = ".env") -> Config:
     }
     missing = [key for key, value in required_values.items() if not value]
     if missing:
+        logger.error("Missing required environment variables: %s", ", ".join(missing))
         raise ConfigError(f"Missing required environment variables: {', '.join(missing)}")
 
     try:
         office_lat = float(required_values["OFFICE_LAT"])
         office_long = float(required_values["OFFICE_LONG"])
     except ValueError as exc:
+        logger.error("OFFICE_LAT and OFFICE_LONG must be valid numbers.")
         raise ConfigError("OFFICE_LAT and OFFICE_LONG must be valid numbers") from exc
 
+    logger.debug("Configuration loaded successfully for API URL %s.", required_values["KVON_API_URL"])
     return Config(
         api_url=required_values["KVON_API_URL"].rstrip("/"),
         office_lat=office_lat,

@@ -2,6 +2,10 @@ import logging
 import requests
 from config import Config
 
+
+logger = logging.getLogger(__name__)
+
+
 class NotificationService:
     def __init__(self, config: Config):
         self.bot_token = config.telegram_bot_token
@@ -15,7 +19,7 @@ class NotificationService:
     def send_alert(self, message: str) -> bool:
         """Pushes a Markdown-formatted message to the Telegram Chat ID."""
         if not self.bot_token or not self.chat_id:
-            logging.warning("Telegram credentials missing. Skipping notification push.")
+            logger.warning("Telegram credentials missing. Skipping notification push.")
             return False
             
         url = f"{self.base_url}/sendMessage"
@@ -26,16 +30,16 @@ class NotificationService:
         }
         
         try:
-            # We use a strict timeout so a Telegram outage doesn't hang your script
+            # We use a strict timeout so a Telegram outage doesn't hang the script
             response = requests.post(url, json=payload, timeout=5)
             
             if response.status_code == 200:
-                logging.info("🔔 Telegram notification pushed successfully.")
+                logger.info("🔔 Telegram notification pushed successfully.")
                 return True
                 
-            logging.error("❌ Failed to push Telegram notification: %s", response.text)
+            logger.error("❌ Failed to push Telegram notification: %s", response.text)
             return False
             
-        except requests.exceptions.RequestException as e:
-            logging.error("❌ Telegram request failed: %s", e)
+        except requests.exceptions.RequestException:
+            logger.exception("❌ Telegram request failed.")
             return False

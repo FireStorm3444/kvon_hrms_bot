@@ -3,10 +3,15 @@ import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
+
+logger = logging.getLogger(__name__)
+
+
 class APIClient:
     def __init__(self, base_url: str):
         self.base_url = base_url
         self.session = self._build_session()
+        logger.debug("API client initialized for base URL %s.", base_url)
 
     def _build_session(self) -> requests.Session:
         session = requests.Session()
@@ -30,11 +35,16 @@ class APIClient:
             "Accept": "application/json",
             "Content-Type": "application/json"
         })
+        logger.debug("HTTP session configured with retry policy.")
         return session
 
     def set_bearer_token(self, token: str) -> None:
         self.session.headers.update({"Authorization": f"Bearer {token}"})
+        logger.debug("Bearer token attached to API session.")
 
     def post(self, endpoint: str, payload: dict | list) -> requests.Response:
         url = f"{self.base_url}{endpoint}"
-        return self.session.post(url, json=payload, timeout=10)
+        logger.info("POST %s", endpoint)
+        response = self.session.post(url, json=payload, timeout=10)
+        logger.info("POST %s completed with status %s.", endpoint, response.status_code)
+        return response

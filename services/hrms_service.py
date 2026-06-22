@@ -5,6 +5,10 @@ from config import Config
 from core.api_client import APIClient
 from services.geo_service import GeoService
 
+
+logger = logging.getLogger(__name__)
+
+
 class AttendanceAction(str, Enum):
     CHECK_IN = "check-in"
     CHECK_OUT = "check-out"
@@ -21,7 +25,7 @@ class HRMSService:
         self.api = api_client
 
     def login(self) -> bool:
-        logging.info("🔑 Attempting authentication...")
+        logger.info("🔑 Attempting authentication...")
         payload = {
             "emp_id": self.config.emp_id,
             "email": self.config.email,
@@ -37,14 +41,14 @@ class HRMSService:
                 
             if token:
                 self.api.set_bearer_token(token)
-                logging.info("✅ Authentication successful.")
+                logger.info("✅ Authentication successful.")
                 return True, "Authentication successful"
             
-            logging.error("❌ Failed to extract token. API returned: %s", data)
+            logger.error("❌ Failed to extract token. API response type: %s", type(data).__name__)
             return False, "Failed to extract token"
             
         except Exception as e:
-            logging.error("❌ Login failed: %s", e)
+            logger.exception("❌ Login failed.")
             return False, str(e)
 
     def submit_timesheet(self, task_name: str, task_details: str, mentor_name: str, start_time: str, end_time: str) -> bool:
@@ -58,17 +62,17 @@ class HRMSService:
             "task_details": task_details
         }]
 
-        logging.info("📝 Submitting timesheet for %s...", today_str)
+        logger.info("📝 Submitting timesheet for %s...", today_str)
         try:
             response = self.api.post(api_endpoints.TIMESHEET_BULK.value, payload)
             if response.status_code in [200, 201]:
-                logging.info("✅ Timesheet logged successfully.")
+                logger.info("✅ Timesheet logged successfully.")
                 return True
                 
-            logging.warning("❌ Timesheet rejected: %s", response.text)
+            logger.warning("❌ Timesheet rejected: %s", response.text)
             return False
-        except Exception as e:
-            logging.error("❌ Timesheet request failed: %s", e)
+        except Exception:
+            logger.exception("❌ Timesheet request failed.")
             return False
 
     def submit_attendance(self, action: AttendanceAction) -> bool:
@@ -76,16 +80,16 @@ class HRMSService:
         payload = {"latitude": lat, "longitude": long}
         action_name = action.value.replace('-', ' ').title()
         
-        logging.info("📍 Sending %s payload: %s, %s", action.value, lat, long)
+        logger.info("📍 Sending %s payload: %s, %s", action.value, lat, long)
         try:
             response = self.api.post(api_endpoints.ATTENDANCE_CHECK_IN.value if action == AttendanceAction.CHECK_IN else api_endpoints.ATTENDANCE_CHECK_OUT.value, payload)
             text = response.text
             if response.status_code in [200, 201]:
-                logging.info("✅ %s successful.", action_name)
+                logger.info("✅ %s successful.", action_name)
                 return True
                 
-            logging.warning("❌ %s rejected: %s", action_name, text)
+            logger.warning("❌ %s rejected: %s", action_name, text)
             return False, text
         except Exception as e:
-            logging.error("❌ %s request failed: %s", action_name, e)
+            logger.exception("❌ %s request failed.", action_name)
             return False, str(e)

@@ -6,20 +6,19 @@ from datetime import datetime
 from config import get_config, ConfigError #[cite: 8]
 from core.api_client import APIClient #[cite: 8]
 from core.database import DatabaseManager
+from core.logging_config import setup_logging
 from services.hrms_service import HRMSService, AttendanceAction #[cite: 8]
 from services.notifier import NotificationService #[cite: 8]
 
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s [%(levelname)s] %(message)s',
-    handlers=[logging.FileHandler("hrms_system.log"), logging.StreamHandler()] #[cite: 8]
-)
+setup_logging()
+logger = logging.getLogger(__name__)
 
 def run_workflow(action: AttendanceAction, is_automated: bool):
+    logger.info("Starting workflow for action=%s automated=%s.", action.value, is_automated)
     try:
         config = get_config() #[cite: 8]
     except ConfigError as exc:
-        logging.error("Configuration Error: %s", exc) #[cite: 8]
+        logger.error("Configuration Error: %s", exc) #[cite: 8]
         return
 
     # Initialize State Engines
@@ -32,20 +31,20 @@ def run_workflow(action: AttendanceAction, is_automated: bool):
 
     # 1. Idempotent Skip-Date Verification
     if db.is_date_skipped(today_str):
-        logging.info("📆 Date %s matches skip ledger. Gracefully aborting execution.", today_str)
+        logger.info("📆 Date %s matches skip ledger. Gracefully aborting execution.", today_str)
         notifier.send_alert(f"ℹ️ Automated *{action.value}* skipped for today (`{today_str}`) via Telegram command.")
         return
 
     # 2. Weekend Check
     if datetime.today().weekday() > 4:  # 5 = Saturday, 6 = Sunday[cite: 8]
-        logging.info("Weekend detected. Skipping execution.") #[cite: 8]
+        logger.info("Weekend detected. Skipping execution.") #[cite: 8]
         notifier.send_alert("Weekend detected. Automated attendance skipped.") #[cite: 8]
         return
     
     # 3. Apply organic delay for automated morning check-ins
     if is_automated:
         delay = random.randint(0, 900)  # Up to 15 minutes[cite: 8]
-        logging.info("Scheduled to %s after %s seconds...", action.value, delay) #[cite: 8]
+        logger.info("Scheduled to %s after %s seconds...", action.value, delay) #[cite: 8]
         notifier.send_alert(f"Automated {action.value} will be attempted in {delay} seconds.") #[cite: 8]
         time.sleep(delay) #[cite: 8]
 
@@ -57,11 +56,11 @@ def run_workflow(action: AttendanceAction, is_automated: bool):
 
     # 5. Non-Interactive Headless Timesheet Management
     if action == AttendanceAction.CHECK_OUT: #[cite: 8]
-        logging.info("Querying local persistence for pending timesheet entries...")
+        logger.info("Querying local persistence for pending timesheet entries...")
         pending_ts = db.get_pending_timesheet()
         
         if pending_ts:
-            logging.info("📝 Staged timesheet payload found. Dispatching to API...")
+            logger.info("📝 Staged timesheet payload found. Dispatching to API...")
             ts_success = hrms.submit_timesheet(
                 task_name=pending_ts["task_name"],
                 task_details=pending_ts["task_details"],
@@ -76,7 +75,7 @@ def run_workflow(action: AttendanceAction, is_automated: bool):
             else:
                 notifier.send_alert("⚠️ Staged timesheet upload rejected by API. Forcing check-out attempt anyway.")
         else:
-            logging.info("ℹ️ No staged timesheet metadata discovered. Attempting raw check-out.")
+            logger.info("ℹ️ No staged timesheet metadata discovered. Attempting raw check-out.")
 
     # 6. Execute Attendance Pipeline
     result = hrms.submit_attendance(action) #[cite: 8]
@@ -88,9 +87,11 @@ def run_workflow(action: AttendanceAction, is_automated: bool):
         status, server_msg = result, "Action completed successfully." #[cite: 5]
 
     if status:
+        logger.info("Workflow completed successfully for action=%s.", action.value)
         notifier.send_alert(f"Successfully executed {action.value}: {server_msg}") #[cite: 8]
     else:
         # If this fails with "please fill the timesheet", the text maps cleanly into server_msg
+        logger.warning("Workflow failed for action=%s with message: %s", action.value, server_msg)
         notifier.send_alert(f"❌ Failed to execute {action.value}: `{server_msg}`")
 
 if __name__ == "__main__":

@@ -2,9 +2,14 @@ import sqlite3
 import logging
 from typing import Optional
 
+
+logger = logging.getLogger(__name__)
+
+
 class DatabaseManager:
     def __init__(self, db_path: str = "hrms_state.db"):
         self.db_path = db_path
+        logger.debug("Database manager initialized with path %s.", db_path)
         self._init_db()
 
     def _init_db(self):
@@ -35,7 +40,7 @@ class DatabaseManager:
                 )
             """)
             conn.commit()
-            logging.info("🗄️ Database schema verified.")
+            logger.info("🗄️ Database schema verified.")
 
     # --- SKIP COMMAND LOGIC ---
 
@@ -48,9 +53,10 @@ class DatabaseManager:
                     (target_date,)
                 )
                 conn.commit()
+                logger.info("Skip date stored: %s.", target_date)
                 return True
-            except sqlite3.Error as e:
-                logging.error(f"Database error adding skip date: {e}")
+            except sqlite3.Error:
+                logger.exception("Database error adding skip date %s.", target_date)
                 return False
 
     def is_date_skipped(self, current_date: str) -> bool:
@@ -60,7 +66,9 @@ class DatabaseManager:
                 "SELECT 1 FROM skipped_dates WHERE target_date = ?", 
                 (current_date,)
             )
-            return cursor.fetchone() is not None
+            is_skipped = cursor.fetchone() is not None
+            logger.debug("Skip-date lookup for %s returned %s.", current_date, is_skipped)
+            return is_skipped
 
     # --- TIMESHEET STATE LOGIC ---
 
@@ -74,9 +82,10 @@ class DatabaseManager:
                     VALUES (1, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
                 """, (task, details, mentor, start, end))
                 conn.commit()
+                logger.info("Pending timesheet saved for mentor %s.", mentor)
                 return True
-            except sqlite3.Error as e:
-                logging.error(f"Database error saving timesheet: {e}")
+            except sqlite3.Error:
+                logger.exception("Database error saving pending timesheet.")
                 return False
 
     def get_pending_timesheet(self) -> Optional[dict]:
@@ -85,10 +94,13 @@ class DatabaseManager:
             conn.row_factory = sqlite3.Row  # Returns dict-like objects
             cursor = conn.execute("SELECT * FROM pending_timesheets WHERE id = 1")
             row = cursor.fetchone()
-            return dict(row) if row else None
+            pending_timesheet = dict(row) if row else None
+            logger.debug("Pending timesheet lookup found data: %s.", bool(pending_timesheet))
+            return pending_timesheet
 
     def clear_pending_timesheet(self) -> None:
         """Wipes the timesheet state after a successful check-out."""
         with sqlite3.connect(self.db_path) as conn:
             conn.execute("DELETE FROM pending_timesheets WHERE id = 1")
             conn.commit()
+            logger.info("Pending timesheet cleared.")
