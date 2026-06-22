@@ -67,11 +67,20 @@ async def process_skip_date(send_function, target_input: str, state: FSMContext)
     
     if target == "tomorrow":
         target_date = (datetime.today() + timedelta(days=1)).strftime("%Y-%m-%d")
+    elif target == "reset":
+        target_date = None
     else:
         # Assuming the user typed a raw date string
         target_date = target
         
-    if db.add_skip_date(target_date):
+    if not target_date:
+        if db.clear_skip_dates():
+            logger.info("Skip date reset successfully.")
+            await send_function("✅ Skip date reset. Automated check-ins will resume as normal.")
+        else:
+            logger.error("Skip date reset failed.")
+            await send_function("❌ Database error occurred while trying to reset skip dates.")
+    elif db.add_skip_date(target_date):
         logger.info("Skip date processed successfully: %s.", target_date)
         await send_function(f"✅ Noted. I have updated the database to skip the automated check-in on `{target_date}`.", parse_mode="Markdown")
     else:

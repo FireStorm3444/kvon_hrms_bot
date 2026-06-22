@@ -43,6 +43,17 @@ class DatabaseManager:
             logger.info("🗄️ Database schema verified.")
 
     # --- SKIP COMMAND LOGIC ---
+    def clear_skip_dates(self) -> bool:
+        """Deletes all skip dates, effectively resetting the skip ledger."""
+        with sqlite3.connect(self.db_path) as conn:
+            try:
+                conn.execute("DELETE FROM skipped_dates")
+                conn.commit()
+                logger.info("All skip dates cleared from the database.")
+                return True
+            except sqlite3.Error:
+                logger.exception("Database error clearing skip dates.")
+                return False
 
     def add_skip_date(self, target_date: str) -> bool:
         """Upserts a date to skip. Format: YYYY-MM-DD"""
