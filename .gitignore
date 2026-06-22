@@ -13,7 +13,9 @@ wheels/
 
 details.txt
 
-hrms_system.log
+hrms_state.db
+
+*.log
 
 *.db-shm
 *.db-wal
