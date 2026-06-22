@@ -4,10 +4,9 @@ from datetime import datetime
 from config import Config
 from core.api_client import APIClient
 from services.geo_service import GeoService
-
+from services.notifier import NotificationService
 
 logger = logging.getLogger(__name__)
-
 
 class AttendanceAction(str, Enum):
     CHECK_IN = "check-in"
@@ -31,6 +30,8 @@ class HRMSService:
             "email": self.config.email,
             "password": self.config.password
         }
+
+        notifier = NotificationService(self.config)
         
         try:
             response = self.api.post(api_endpoints.LOGIN.value, payload)
@@ -42,13 +43,16 @@ class HRMSService:
             if token:
                 self.api.set_bearer_token(token)
                 logger.info("✅ Authentication successful.")
+                notifier.send_alert("✅ Authentication successful.")
                 return True, "Authentication successful"
             
             logger.error("❌ Failed to extract token. API response type: %s", type(data).__name__)
+            notifier.send_alert("❌ Authentication failed: Unable to extract token.")
             return False, "Failed to extract token"
             
         except Exception as e:
             logger.exception("❌ Login failed.")
+            notifier.send_alert("❌ Login failed.")
             return False, str(e)
 
     def submit_timesheet(self, task_name: str, task_details: str, mentor_name: str, start_time: str, end_time: str) -> bool:
