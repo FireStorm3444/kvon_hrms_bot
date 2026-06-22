@@ -25,7 +25,7 @@ jobs:
     - name: Run HRMS Check-In with Job-Level Retries
       uses: nick-fields/retry@v3
       with:
-        timeout_minutes: 10
+        timeout_minutes: 20
         max_attempts: 3
         retry_on: error
         command: python main.py --action check-in --automated
