@@ -42,6 +42,13 @@ class APIClient:
         self.session.headers.update({"Authorization": f"Bearer {token}"})
         logger.debug("Bearer token attached to API session.")
 
+    def get(self, endpoint: str, params: dict | None = None) -> requests.Response:
+        url = f"{self.base_url}{endpoint}"
+        logger.info("GET %s", endpoint)
+        response = self.session.get(url, params=params, timeout=10)
+        logger.info("GET %s completed with status %s.", endpoint, response.status_code)
+        return response
+
     def post(self, endpoint: str, payload: dict | list) -> requests.Response:
         url = f"{self.base_url}{endpoint}"
         logger.info("POST %s", endpoint)
