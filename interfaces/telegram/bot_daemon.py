@@ -72,6 +72,8 @@ async def process_skip_date(send_function, target_input: str, state: FSMContext)
     else:
         # Assuming the user typed a raw date string
         target_date = target
+
+    await send_function(f"⏳ Processing skip date: `{target_date}`...", parse_mode="Markdown")
         
     if not target_date:
         if db.clear_skip_dates():
