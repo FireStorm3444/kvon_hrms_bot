@@ -68,7 +68,7 @@ async def process_skip_date(send_function, target_input: str, state: FSMContext)
     if target == "tomorrow":
         target_date = (datetime.today() + timedelta(days=1)).strftime("%Y-%m-%d")
     elif target == "reset":
-        target_date = None
+        target_date = False
     else:
         # Assuming the user typed a raw date string
         target_date = target
