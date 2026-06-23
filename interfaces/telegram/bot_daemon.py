@@ -12,6 +12,9 @@ from config import get_config
 from core.database import DatabaseManager
 from core.logging_config import setup_logging
 
+from core.api_client import APIClient
+from services.hrms_service import HRMSService
+
 setup_logging()
 logger = logging.getLogger(__name__)
 
@@ -204,9 +207,64 @@ async def execute_main_script(action: str):
     else:
         logger.info("Subprocess for %s completed with returncode=%s.", action, process.returncode)
 
+# --- SYSTEM STATUS COMMAND ---
+@router.message(Command("status"))
+async def handle_status(message: Message):
+    logger.info("Received /status command from chat_id=%s.", message.chat.id)
+    status_msg = await message.answer("🔄 Connecting to KvonTech servers...", parse_mode="Markdown")
+
+    def fetch_status_sync():
+        """Synchronous wrapper to run in a background thread"""
+        api_client = APIClient(config.api_url)
+        hrms = HRMSService(config, api_client)
+        
+        # Silent login prevents notification spam
+        success, _ = hrms.login(silent=True)
+        if not success:
+            return None
+        return hrms.get_status()
+
+    # Offload the blocking HTTP requests to a thread pool
+    data = await asyncio.to_thread(fetch_status_sync)
+
+    if not data:
+        await status_msg.edit_text("❌ Failed to pull telemetry from the server.")
+        return
+
+    # Parse the response payload
+    status = data.get("status", "Unknown")
+    record = data.get("record", {})
+
+    date_str = record.get("date", "N/A")
+    check_in = record.get("checkIn", "N/A")
+    check_out = record.get("checkOut", "N/A")
+    hours = record.get("hours", "0 hrs")
+    verified = record.get("verified", "No")
+
+    # Format the UI
+    response_text = (
+        f"📊 **KvonTech Status Console**\n"
+        f"📅 **Date:** `{date_str}`\n"
+        f"🛡️ **Status:** `{status}` (Verified: {verified})\n\n"
+        f"🟢 **Check-In:** `{check_in}`\n"
+        f"🔴 **Check-Out:** `{check_out}`\n"
+        f"⏱️ **Total Hours:** `{hours}`\n"
+    )
+
+    # Cross-reference with local system architecture
+    pending_ts = db.get_pending_timesheet()
+    response_text += "\n⚙️ **Local Infrastructure State:**\n"
+    if pending_ts:
+        response_text += f"📝 Timesheet staged for: `{pending_ts['task_name']}`"
+    else:
+        response_text += "⚠️ No timesheet currently parked in memory."
+
+    await status_msg.edit_text(response_text, parse_mode="Markdown")
+
 async def setup_bot_commands(bot: Bot):
     """Pushes the command menu to Telegram"""
     commands = [
+        BotCommand(command="status", description="Live telemetry from KvonTech servers"),
         BotCommand(command="check_in", description="Force an immediate check-in"),
         BotCommand(command="check_out", description="Trigger the check-out sequence"),
         BotCommand(command="timesheet", description="Pre-fill your timesheet for today"),

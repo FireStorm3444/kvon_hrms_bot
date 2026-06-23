@@ -17,13 +17,14 @@ class api_endpoints(str, Enum):
     TIMESHEET_BULK = "/timesheets/bulk"
     ATTENDANCE_CHECK_IN = "/attendance/check-in"
     ATTENDANCE_CHECK_OUT = "/attendance/check-out"
+    ATTENDANCE_STATUS = "/attendance/today/status"
 
 class HRMSService:
     def __init__(self, config: Config, api_client: APIClient):
         self.config = config
         self.api = api_client
 
-    def login(self) -> bool:
+    def login(self, silent: bool = False) -> tuple[bool, str]: # Updated signature
         logger.info("🔑 Attempting authentication...")
         payload = {
             "emp_id": self.config.emp_id,
@@ -43,16 +44,19 @@ class HRMSService:
             if token:
                 self.api.set_bearer_token(token)
                 logger.info("✅ Authentication successful.")
-                notifier.send_alert("✅ Authentication successful.")
+                if not silent:
+                    notifier.send_alert("✅ Authentication successful.")
                 return True, "Authentication successful"
             
             logger.error("❌ Failed to extract token. API response type: %s", type(data).__name__)
-            notifier.send_alert("❌ Authentication failed: Unable to extract token.")
+            if not silent:
+                notifier.send_alert("❌ Authentication failed: Unable to extract token.")
             return False, "Failed to extract token"
             
         except Exception as e:
             logger.exception("❌ Login failed.")
-            notifier.send_alert("❌ Login failed.")
+            if not silent:
+                notifier.send_alert("❌ Login failed.")
             return False, str(e)
 
     def submit_timesheet(self, task_name: str, task_details: str, mentor_name: str, start_time: str, end_time: str) -> bool:
@@ -97,3 +101,14 @@ class HRMSService:
         except Exception as e:
             logger.exception("❌ %s request failed.", action_name)
             return False, str(e)
+        
+    def get_status(self) -> dict | None:
+        logger.info("📊 Fetching live attendance status...")
+        try:
+            # Assuming your core.api_client has a .get() method. If not, see note below!
+            response = self.api.get(api_endpoints.ATTENDANCE_STATUS.value)
+            response.raise_for_status()
+            return response.json()
+        except Exception as e:
+            logger.exception("❌ Failed to fetch status.")
+            return None
