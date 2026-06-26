@@ -1,39 +1,100 @@
-# HRMS Attendance Script
+# HRMS Attendance Bot
 
-Automates KvonTech HRMS attendance actions from the command line.
+Automation for KvonTech HRMS attendance, timesheets, and Telegram-driven daily workflow.
 
-The script can:
+This project can run in two main ways:
 
-- check in with office coordinates
-- check out after submitting a timesheet
-- add a random delay for automated check-ins
-- send Telegram notifications about success or failure
-- run on GitHub Actions for weekday morning check-ins
+- as a simple command-line automation for check-in/check-out
+- as an interactive Telegram bot on a server, powered by `interfaces/telegram/bot_daemon.py`
+
+## Features
+
+- Automated HRMS check-in and check-out
+- Random check-in delay for more natural scheduled runs
+- Telegram success/failure notifications
+- Interactive Telegram commands for status, check-in, check-out, timesheets, and skip dates
+- Local SQLite state in `hrms_state.db`
+- Timesheet staging before check-out
+- Bulk timesheet upload during check-out
+- Scheduled checkout from Telegram while the daemon is running
+- Weekend skip behavior for automated CLI runs
 
 ## Requirements
 
 - Python 3.14 or newer
-- HRMS API URL
-- valid KvonTech HRMS employee credentials
-- office latitude and longitude
+- KvonTech HRMS API URL
+- Valid HRMS employee credentials
+- Office latitude and longitude
 - Telegram bot token and chat ID
-- internet access from the machine or GitHub runner
+- A server/VPS/always-on machine if you want the interactive Telegram bot
 
-Install Python dependencies:
+## Installation
+
+Clone the project, then install dependencies:
+
+Linux/macOS:
 
 ```bash
+python -m venv .venv
+source .venv/bin/activate
 python -m pip install -r requirements.txt
 ```
 
-If you use `uv`, you can also run commands with:
+Windows PowerShell:
 
-```bash
-uv run python main.py --action check-in
+```powershell
+py -m venv .venv
+.\.venv\Scripts\Activate.ps1
+py -m pip install -r requirements.txt
 ```
 
-## Environment Variables
+Windows Command Prompt:
 
-Create a `.env` file in the project root. The file is ignored by git, so keep your real credentials there.
+```bat
+py -m venv .venv
+.\.venv\Scripts\activate.bat
+py -m pip install -r requirements.txt
+```
+
+If you use `uv`, you can install and run with:
+
+Linux/macOS:
+
+```bash
+uv sync
+uv run python -m interfaces.cli.main --action check-in
+```
+
+Windows PowerShell:
+
+```powershell
+uv sync
+uv run python -m interfaces.cli.main --action check-in
+```
+
+## Environment Setup
+
+Create a `.env` file in the project root:
+
+Linux/macOS:
+
+```bash
+cp .env.example .env
+```
+
+Windows PowerShell:
+
+```powershell
+Copy-Item .env.example .env
+```
+
+Windows Command Prompt:
+
+```bat
+copy .env.example .env
+```
+
+Fill it with your real values:
 
 ```env
 KVON_API_URL=https://your-hrms-api.example.com/api
@@ -50,78 +111,184 @@ Variable reference:
 
 | Variable | Purpose |
 | --- | --- |
-| `KVON_API_URL` | Base HRMS API URL, without a trailing endpoint path (+/api, if all your endpoints use it) |
+| `KVON_API_URL` | Base HRMS API URL, usually ending with `/api` |
 | `OFFICE_LAT` | Office latitude used for attendance location |
 | `OFFICE_LONG` | Office longitude used for attendance location |
 | `KVON_EMP_ID` | Employee ID used during login |
 | `KVON_PASSWORD` | HRMS password |
 | `KVON_EMAIL` | HRMS email address |
-| `TELEGRAM_BOT_TOKEN` | Telegram bot token for notifications |
-| `TELEGRAM_CHAT_ID` | Telegram chat ID that receives notifications |
+| `TELEGRAM_BOT_TOKEN` | Bot token from Telegram BotFather |
+| `TELEGRAM_CHAT_ID` | Telegram chat/user/group ID that receives messages |
 
-## How To Run
+## CLI Usage
 
 Run a manual check-in:
 
+Linux/macOS:
+
 ```bash
-python main.py --action check-in
+python -m interfaces.cli.main --action check-in
+```
+
+Windows:
+
+```powershell
+py -m interfaces.cli.main --action check-in
 ```
 
 Run an automated check-in with a random delay of up to 15 minutes:
 
-```bash
-python main.py --action check-in --automated
-```
-
-Run a manual check-out:
+Linux/macOS:
 
 ```bash
-python main.py --action check-out
+python -m interfaces.cli.main --action check-in --automated
 ```
 
-Check-out asks for timesheet details before submitting attendance:
+Windows:
 
-- task name
-- task details
-- mentor name
-- start time, default `09:00`
-- end time, default `18:00`
+```powershell
+py -m interfaces.cli.main --action check-in --automated
+```
 
-Because check-out requires interactive input, do not use it in a headless cron job or GitHub Actions job unless the script is updated to accept timesheet values as command-line arguments.
+Run check-out:
 
-## Weekend Behavior
+Linux/macOS:
 
-The workflow skips execution on Saturdays and Sundays.
+```bash
+python -m interfaces.cli.main --action check-out
+```
 
-This applies to both check-in and check-out because `main.py` checks the current weekday before doing any HRMS work.
+Windows:
 
-## Logs
+```powershell
+py -m interfaces.cli.main --action check-out
+```
 
-Runtime logs are written to:
+For check-out, the CLI looks for pending timesheets in the local SQLite database. If timesheets were staged through Telegram, they are uploaded first, then the check-out request is sent. If no timesheets are staged, the app still attempts a raw check-out and reports the HRMS response.
+
+## Telegram Bot Setup
+
+1. Open Telegram and message `@BotFather`.
+2. Run `/newbot`, choose a name and username, then copy the bot token.
+3. Put the token in `.env` as `TELEGRAM_BOT_TOKEN`.
+4. Message your new bot once so Telegram creates a chat with it.
+5. Visit this URL in your browser, replacing `<TOKEN>`:
 
 ```text
-hrms_system.log
+https://api.telegram.org/bot<TOKEN>/getUpdates
 ```
 
-The log file is ignored by git.
+6. Find the `chat.id` value and put it in `.env` as `TELEGRAM_CHAT_ID`.
 
-## GitHub Actions Setup
+For a group chat, add the bot to the group, send a message in the group, then use the same `getUpdates` URL to find the group chat ID.
 
-The repository includes `.github/workflows/attendance.yml` for automated weekday morning check-ins.
+## Interactive Telegram Mode
 
-The workflow currently runs:
+If you have a server, VPS, Raspberry Pi, or any always-on machine, you can run the interactive bot:
+
+Linux/macOS:
 
 ```bash
-python main.py --action check-in --automated
+python -m interfaces.telegram.bot_daemon
 ```
 
-Schedule:
+Windows:
 
-- Monday to Friday
-- `03:30 UTC`
-- `09:00 IST`
+```powershell
+py -m interfaces.telegram.bot_daemon
+```
 
-Add these repository secrets in GitHub:
+The daemon polls Telegram and enables these commands:
+
+| Command | What it does |
+| --- | --- |
+| `/status` | Shows live HRMS status and local timesheet state |
+| `/check_in` | Forces an immediate check-in |
+| `/timesheet` | Stages, reviews, resets, or uploads timesheets |
+| `/check_out` | Starts checkout flow using staged timesheets |
+| `/skip_check_in` | Skips an automated check-in for tomorrow or a custom date |
+
+The daemon also runs a background checkout scheduler. From `/check_out`, choose automated checkout, enter a time like `06:30 PM`, and keep the daemon running. At that IST time, it uploads staged timesheets and checks out.
+
+## Automated Check-In Scheduling
+
+For a simple automated morning check-in, schedule the CLI on an always-on machine.
+
+### Linux Server Cron
+
+Open crontab:
+
+```bash
+crontab -e
+```
+
+Example weekday check-in at 9:00 AM IST:
+
+```cron
+0 9 * * 1-5 cd /absolute/path/to/HRMS && /absolute/path/to/HRMS/.venv/bin/python -m interfaces.cli.main --action check-in --automated >> hrms_cron.log 2>&1
+```
+
+If you do not use a virtual environment, use the full path to your Python executable instead:
+
+```cron
+0 9 * * 1-5 cd /absolute/path/to/HRMS && /usr/bin/python3 -m interfaces.cli.main --action check-in --automated >> hrms_cron.log 2>&1
+```
+
+`cron-job.org` is useful for calling HTTP URLs, but this project currently exposes a CLI and Telegram polling daemon, not a web endpoint. Use normal server cron for the command above. If you later add a secured webhook endpoint, then cron-job.org can call that endpoint on a schedule.
+
+### Windows Task Scheduler
+
+Most Windows users should use Task Scheduler instead of cron.
+
+Create a scheduled task from the GUI:
+
+1. Open **Task Scheduler**.
+2. Choose **Create Basic Task**.
+3. Set the trigger to weekdays at your check-in time.
+4. Choose **Start a program**.
+5. Set **Program/script** to the full path of Python, for example:
+
+```text
+C:\Users\YourName\AppData\Local\Programs\Python\Python314\python.exe
+```
+
+6. Set **Add arguments** to:
+
+```text
+-m interfaces.cli.main --action check-in --automated
+```
+
+7. Set **Start in** to your project folder, for example:
+
+```text
+C:\Users\YourName\Projects\HRMS
+```
+
+If you use the project virtual environment, set **Program/script** to:
+
+```text
+C:\Users\YourName\Projects\HRMS\.venv\Scripts\python.exe
+```
+
+You can also create the task from PowerShell:
+
+```powershell
+$project = "C:\Users\YourName\Projects\HRMS"
+$python = "$project\.venv\Scripts\python.exe"
+$action = New-ScheduledTaskAction -Execute $python -Argument "-m interfaces.cli.main --action check-in --automated" -WorkingDirectory $project
+$trigger = New-ScheduledTaskTrigger -Weekly -DaysOfWeek Monday,Tuesday,Wednesday,Thursday,Friday -At 9:00AM
+Register-ScheduledTask -TaskName "HRMS Automated Check-In" -Action $action -Trigger $trigger -Description "Automated weekday HRMS check-in"
+```
+
+## GitHub Actions
+
+You can also run automated check-in from GitHub Actions by using this command in the workflow:
+
+```bash
+python -m interfaces.cli.main --action check-in --automated
+```
+
+Add these repository secrets:
 
 - `KVON_API_URL`
 - `OFFICE_LAT`
@@ -132,35 +299,82 @@ Add these repository secrets in GitHub:
 - `TELEGRAM_BOT_TOKEN`
 - `TELEGRAM_CHAT_ID`
 
-You can also trigger the workflow manually from the GitHub Actions tab using `workflow_dispatch`.
+Because attendance automation depends on your account, network, timezone, and HRMS availability, test the workflow manually before relying on a schedule.
+
+## Local State
+
+The app writes local state to:
+
+```text
+hrms_state.db
+```
+
+This database stores:
+
+- dates skipped through `/skip_check_in`
+- pending timesheets staged through `/timesheet`
+- the scheduled checkout time created through Telegram
+
+The database is intentionally ignored by git.
+
+## Logs
+
+Runtime logs are written to:
+
+```text
+hrms_system.log
+```
+
+You can change the log file or log level with:
+
+Linux/macOS:
+
+```bash
+HRMS_LOG_FILE=logs/hrms.log HRMS_LOG_LEVEL=DEBUG python -m interfaces.cli.main --action check-in
+```
+
+Windows PowerShell:
+
+```powershell
+$env:HRMS_LOG_FILE = "logs/hrms.log"
+$env:HRMS_LOG_LEVEL = "DEBUG"
+py -m interfaces.cli.main --action check-in
+```
 
 ## How It Works
 
-1. Loads required settings from `.env` or environment variables.
-2. Skips execution if today is a weekend.
-3. Optionally waits for a random delay when `--automated` is used.
-4. Logs in to the HRMS API.
-5. For check-out, submits a timesheet first.
-6. Sends the check-in or check-out request with slightly jittered office coordinates.
-7. Sends a Telegram notification with the result.
+1. Loads settings from `.env` or environment variables.
+2. Checks the local skip-date ledger.
+3. Skips weekend CLI automation.
+4. Applies a random delay when `--automated` is used.
+5. Logs in to the HRMS API.
+6. Uploads staged timesheets before check-out.
+7. Sends attendance with slightly jittered office coordinates.
+8. Sends Telegram notifications with the result.
 
 ## Troubleshooting
 
-If the script exits with a configuration error, check that all required variables exist in `.env` or in your shell environment.
+If configuration fails, check that every required variable exists in `.env`.
+
+If Telegram does not respond, verify the bot token, chat ID, and that you sent at least one message to the bot.
 
 If login fails, verify `KVON_EMP_ID`, `KVON_EMAIL`, `KVON_PASSWORD`, and `KVON_API_URL`.
 
-If location-based attendance is rejected, confirm `OFFICE_LAT` and `OFFICE_LONG` match the office location expected by HRMS.
+If attendance is rejected for location, confirm `OFFICE_LAT` and `OFFICE_LONG` match the office location expected by HRMS.
 
-If Telegram notifications fail, verify that the bot token is valid and that the bot can message the configured chat ID.
+If checkout fails because timesheets are missing, stage them first with `/timesheet`, or use the `/timesheet` send option to upload them before checkout.
 
 ## Project Structure
 
 ```text
-main.py                  CLI entry point
-config.py                Environment loading and validation
-core/api_client.py       HTTP client with retry behavior
-services/hrms_service.py HRMS login, timesheet, and attendance logic
-services/geo_service.py  Coordinate jitter helper
-services/notifier.py     Telegram notification service
+config.py                              Environment loading and validation
+core/api_client.py                     HTTP client with retry behavior
+core/database.py                       SQLite state for skips, timesheets, and checkout schedule
+core/logging_config.py                 Shared logging setup
+interfaces/cli/main.py                 CLI entry point for check-in/check-out
+interfaces/telegram/bot_daemon.py      Telegram polling daemon
+interfaces/telegram/handlers/          Telegram command handlers
+services/hrms_service.py               HRMS login, timesheet, attendance, and status logic
+services/geo_service.py                Coordinate jitter helper
+services/notifier.py                   Telegram notification service
 ```
