@@ -9,3 +9,6 @@ class TimesheetState(StatesGroup):
 
 class SkipState(StatesGroup):
     waiting_for_date = State()
+
+class CheckoutState(StatesGroup):
+    waiting_for_time = State()

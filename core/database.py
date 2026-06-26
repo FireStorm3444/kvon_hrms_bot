@@ -22,7 +22,6 @@ class DatabaseManager:
             """)
             
             # Table 2: Multi-Row Timesheet Engine (Upgraded)
-            # Notice the IST timezone shift for target_date
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS pending_timesheets (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -36,6 +35,14 @@ class DatabaseManager:
                 )
             """)
             conn.commit()
+
+            # Table 3: Single-Row Scheduled Checkout Engine
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS scheduled_checkout (
+                    id INTEGER PRIMARY KEY CHECK (id = 1),
+                    target_time TEXT NOT NULL
+                )
+            """)
 
     # --- SKIP COMMAND LOGIC ---
 
@@ -70,7 +77,7 @@ class DatabaseManager:
                 logging.error(f"Database error clearing skip dates: {e}")
                 return False
 
-    # --- TIMESHEET BATCH LOGIC (PHASE 1 UPGRADES) ---
+    # --- TIMESHEET BATCH LOGIC ---
 
     def check_time_overlap(self, new_start: str, new_end: str) -> bool:
         """
@@ -125,3 +132,28 @@ class DatabaseManager:
             except sqlite3.Error as e:
                 logging.error(f"Database error clearing timesheets: {e}")
                 return False
+            
+    # --- SCHEDULED CHECKOUT LOGIC ---
+    def set_scheduled_checkout(self, time_24h: str) -> bool:
+        """Saves a 24-hour target time (HH:MM) for the background worker."""
+        with sqlite3.connect(self.db_path) as conn:
+            try:
+                conn.execute("INSERT OR REPLACE INTO scheduled_checkout (id, target_time) VALUES (1, ?)", (time_24h,))
+                conn.commit()
+                return True
+            except sqlite3.Error as e:
+                logging.error(f"Database error saving schedule: {e}")
+                return False
+
+    def get_scheduled_checkout(self) -> str | None:
+        """Retrieves the scheduled checkout time."""
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.execute("SELECT target_time FROM scheduled_checkout WHERE id = 1")
+            row = cursor.fetchone()
+            return row[0] if row else None
+
+    def clear_scheduled_checkout(self) -> None:
+        """Wipes the schedule after successful execution or manual reset."""
+        with sqlite3.connect(self.db_path) as conn:
+            conn.execute("DELETE FROM scheduled_checkout WHERE id = 1")
+            conn.commit()
