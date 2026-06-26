@@ -24,8 +24,8 @@ async def handle_checkin(message: Message):
 @router.message(Command("check_out"))
 async def handle_checkout(message: Message):
     logger.info("Received /check_out command.")
-    if db.get_pending_timesheet():
-        await message.answer("🔄 Timesheet found in memory. Initiating check-out sequence...")
+    if db.get_pending_timesheets():
+        await message.answer("🔄 Timesheets found in memory. Initiating check-out sequence...")
         asyncio.create_task(execute_main_script("check-out"))
     else:
         keyboard = InlineKeyboardMarkup(inline_keyboard=[
@@ -33,7 +33,7 @@ async def handle_checkout(message: Message):
             [InlineKeyboardButton(text="⚠️ Force Raw Check-Out", callback_data="force_checkout")]
         ])
         await message.answer(
-            "⚠️ **Timesheet Required**\n\nYou haven't staged a timesheet yet.", 
+            "⚠️ **Timesheet Required**\n\nYou haven't staged any timesheets yet.", 
             reply_markup=keyboard, parse_mode="Markdown"
         )
 
@@ -71,6 +71,10 @@ async def handle_status(message: Message):
         f"⚙️ **Local Infrastructure State:**\n"
     )
 
-    pending_ts = db.get_pending_timesheet()
-    response_text += f"📝 Timesheet staged for: `{pending_ts['task_name']}`" if pending_ts else "⚠️ No timesheet currently parked in memory."
+    pending_timesheets = db.get_pending_timesheets()
+    if pending_timesheets:
+        response_text += f"📝 `{len(pending_timesheets)}` timesheet(s) currently parked in memory."
+    else:
+        response_text += "⚠️ No timesheets currently parked in memory."
+        
     await status_msg.edit_text(response_text, parse_mode="Markdown")

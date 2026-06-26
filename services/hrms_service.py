@@ -24,7 +24,7 @@ class HRMSService:
         self.config = config
         self.api = api_client
 
-    def login(self, silent: bool = False) -> tuple[bool, str]: # Updated signature
+    def login(self, silent: bool = False) -> tuple[bool, str]:
         logger.info("🔑 Attempting authentication...")
         payload = {
             "emp_id": self.config.emp_id,
@@ -59,38 +59,54 @@ class HRMSService:
                 notifier.send_alert("❌ Login failed.")
             return False, str(e)
 
-    def submit_timesheet(self, task_name: str, task_details: str, mentor_name: str, start_time: str, end_time: str) -> bool:
-        today_str = datetime.today().strftime("%Y-%m-%d")
-        payload = [{
-            "date": today_str,
-            "start_time": start_time,
-            "end_time": end_time,
-            "mentor_name": mentor_name,
-            "task_name": task_name,
-            "task_details": task_details
-        }]
+    def submit_timesheet(self, timesheets: list[dict]) -> bool:
+        """Takes a list of timesheet dictionaries and submits them as a single bulk payload."""
+        if not timesheets:
+            logger.info("ℹ️ No timesheets provided for submission.")
+            return True
 
-        logger.info("📝 Submitting timesheet for %s...", today_str)
+        # Defensively sort the list chronologically to ensure network safety
+        sorted_timesheets = sorted(timesheets, key=lambda x: x["start_time"])
+        
+        payload = []
+        for ts in sorted_timesheets:
+            # Fallback to today's date if target_date isn't present in the dictionary
+            date_str = ts.get("target_date") or datetime.today().strftime("%Y-%m-%d")
+            
+            payload.append({
+                "date": date_str,
+                "start_time": ts["start_time"],
+                "end_time": ts["end_time"],
+                "mentor_name": ts["mentor_name"],
+                "task_name": ts["task_name"],
+                "task_details": ts["task_details"]
+            })
+
+        logger.info("📝 Submitting batch of %d timesheet(s)...", len(payload))
         try:
             response = self.api.post(api_endpoints.TIMESHEET_BULK.value, payload)
             if response.status_code in [200, 201]:
-                logger.info("✅ Timesheet logged successfully.")
+                logger.info("✅ Bulk timesheet logged successfully.")
                 return True
                 
-            logger.warning("❌ Timesheet rejected: %s", response.text)
+            logger.warning("❌ Timesheet batch rejected: %s", response.text)
             return False
         except Exception:
-            logger.exception("❌ Timesheet request failed.")
+            logger.exception("❌ Timesheet bulk request failed.")
             return False
 
-    def submit_attendance(self, action: AttendanceAction) -> bool:
+    def submit_attendance(self, action: AttendanceAction) -> bool | tuple[bool, str]:
         lat, long = GeoService.get_jittered_coordinates(self.config.office_lat, self.config.office_long)
         payload = {"latitude": lat, "longitude": long}
         action_name = action.value.replace('-', ' ').title()
         
         logger.info("📍 Sending %s payload: %s, %s", action.value, lat, long)
         try:
-            response = self.api.post(api_endpoints.ATTENDANCE_CHECK_IN.value if action == AttendanceAction.CHECK_IN else api_endpoints.ATTENDANCE_CHECK_OUT.value, payload)
+            response = self.api.post(
+                api_endpoints.ATTENDANCE_CHECK_IN.value if action == AttendanceAction.CHECK_IN 
+                else api_endpoints.ATTENDANCE_CHECK_OUT.value, 
+                payload
+            )
             text = response.text
             if response.status_code in [200, 201]:
                 logger.info("✅ %s successful.", action_name)
@@ -105,7 +121,6 @@ class HRMSService:
     def get_status(self) -> dict | None:
         logger.info("📊 Fetching live attendance status...")
         try:
-            # Assuming your core.api_client has a .get() method. If not, see note below!
             response = self.api.get(api_endpoints.ATTENDANCE_STATUS.value)
             response.raise_for_status()
             return response.json()

@@ -1,21 +1,15 @@
 import sqlite3
 import logging
-from typing import Optional
-
-
-logger = logging.getLogger(__name__)
-
+from typing import Optional, List, Dict
 
 class DatabaseManager:
     def __init__(self, db_path: str = "hrms_state.db"):
         self.db_path = db_path
-        logger.debug("Database manager initialized with path %s.", db_path)
         self._init_db()
 
     def _init_db(self):
-        """Initializes the schema with enterprise-grade PRAGMAs."""
+        """Initializes the schema with enterprise-grade PRAGMAs and IST timezone offsets."""
         with sqlite3.connect(self.db_path) as conn:
-            # Enable Write-Ahead Logging for better concurrent read/writes
             conn.execute("PRAGMA journal_mode=WAL;")
             cursor = conn.cursor()
             
@@ -27,36 +21,25 @@ class DatabaseManager:
                 )
             """)
             
-            # Table 2: Single-Row State Engine for Timesheets
+            # Table 2: Multi-Row Timesheet Engine (Upgraded)
+            # Notice the IST timezone shift for target_date
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS pending_timesheets (
-                    id INTEGER PRIMARY KEY CHECK (id = 1),
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
                     task_name TEXT NOT NULL,
                     task_details TEXT NOT NULL,
                     mentor_name TEXT NOT NULL,
                     start_time TEXT NOT NULL,
                     end_time TEXT NOT NULL,
-                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    target_date DATE DEFAULT (date('now', '+5 hours', '+30 minutes')),
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             """)
             conn.commit()
-            logger.info("🗄️ Database schema verified.")
 
     # --- SKIP COMMAND LOGIC ---
-    def clear_skip_dates(self) -> bool:
-        """Deletes all skip dates, effectively resetting the skip ledger."""
-        with sqlite3.connect(self.db_path) as conn:
-            try:
-                conn.execute("DELETE FROM skipped_dates")
-                conn.commit()
-                logger.info("All skip dates cleared from the database.")
-                return True
-            except sqlite3.Error:
-                logger.exception("Database error clearing skip dates.")
-                return False
 
     def add_skip_date(self, target_date: str) -> bool:
-        """Upserts a date to skip. Format: YYYY-MM-DD"""
         with sqlite3.connect(self.db_path) as conn:
             try:
                 conn.execute(
@@ -64,54 +47,81 @@ class DatabaseManager:
                     (target_date,)
                 )
                 conn.commit()
-                logger.info("Skip date stored: %s.", target_date)
                 return True
-            except sqlite3.Error:
-                logger.exception("Database error adding skip date %s.", target_date)
+            except sqlite3.Error as e:
+                logging.error(f"Database error adding skip date: {e}")
                 return False
 
     def is_date_skipped(self, current_date: str) -> bool:
-        """Checks if the cron job should abort for the given date."""
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.execute(
                 "SELECT 1 FROM skipped_dates WHERE target_date = ?", 
                 (current_date,)
             )
-            is_skipped = cursor.fetchone() is not None
-            logger.debug("Skip-date lookup for %s returned %s.", current_date, is_skipped)
-            return is_skipped
+            return cursor.fetchone() is not None
 
-    # --- TIMESHEET STATE LOGIC ---
+    def clear_skip_dates(self) -> bool:
+        with sqlite3.connect(self.db_path) as conn:
+            try:
+                conn.execute("DELETE FROM skipped_dates")
+                conn.commit()
+                return True
+            except sqlite3.Error as e:
+                logging.error(f"Database error clearing skip dates: {e}")
+                return False
 
-    def save_pending_timesheet(self, task: str, details: str, mentor: str, start: str, end: str) -> bool:
-        """Overwrites the single pending timesheet row."""
+    # --- TIMESHEET BATCH LOGIC (PHASE 1 UPGRADES) ---
+
+    def check_time_overlap(self, new_start: str, new_end: str) -> bool:
+        """
+        Calculates if the proposed times intersect with any existing timesheets for today.
+        Overlap formula: (NewStart < ExistingEnd) AND (NewEnd > ExistingStart)
+        """
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.execute("""
+                SELECT 1 FROM pending_timesheets 
+                WHERE target_date = date('now', '+5 hours', '+30 minutes')
+                AND (? < end_time AND ? > start_time)
+            """, (new_start, new_end))
+            return cursor.fetchone() is not None
+
+    def save_pending_timesheet(self, task: str, details: str, mentor: str, start: str, end: str) -> tuple[bool, str]:
+        """Appends a new timesheet row, aborting if overlaps are detected."""
+        if self.check_time_overlap(start, end):
+            logging.warning(f"Time overlap detected for {start}-{end}. Rejecting save.")
+            return False, "Time overlap detected with an existing entry."
+
         with sqlite3.connect(self.db_path) as conn:
             try:
                 conn.execute("""
-                    INSERT OR REPLACE INTO pending_timesheets 
-                    (id, task_name, task_details, mentor_name, start_time, end_time, updated_at) 
-                    VALUES (1, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                    INSERT INTO pending_timesheets 
+                    (task_name, task_details, mentor_name, start_time, end_time) 
+                    VALUES (?, ?, ?, ?, ?)
                 """, (task, details, mentor, start, end))
                 conn.commit()
-                logger.info("Pending timesheet saved for mentor %s.", mentor)
+                return True, "Success"
+            except sqlite3.Error as e:
+                logging.error(f"Database error saving timesheet: {e}")
+                return False, "Database insertion failed."
+
+    def get_pending_timesheets(self) -> List[Dict]:
+        """Retrieves all pending timesheets for today, ordered chronologically by start time."""
+        with sqlite3.connect(self.db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            cursor = conn.execute("""
+                SELECT * FROM pending_timesheets 
+                WHERE target_date = date('now', '+5 hours', '+30 minutes')
+                ORDER BY start_time ASC
+            """)
+            return [dict(row) for row in cursor.fetchall()]
+
+    def clear_pending_timesheets(self) -> bool:
+        """Wipes today's timesheet state after a successful bulk upload or manual reset."""
+        with sqlite3.connect(self.db_path) as conn:
+            try:
+                conn.execute("DELETE FROM pending_timesheets WHERE target_date = date('now', '+5 hours', '+30 minutes')")
+                conn.commit()
                 return True
-            except sqlite3.Error:
-                logger.exception("Database error saving pending timesheet.")
+            except sqlite3.Error as e:
+                logging.error(f"Database error clearing timesheets: {e}")
                 return False
-
-    def get_pending_timesheet(self) -> Optional[dict]:
-        """Retrieves the pending timesheet to be injected into the API payload."""
-        with sqlite3.connect(self.db_path) as conn:
-            conn.row_factory = sqlite3.Row  # Returns dict-like objects
-            cursor = conn.execute("SELECT * FROM pending_timesheets WHERE id = 1")
-            row = cursor.fetchone()
-            pending_timesheet = dict(row) if row else None
-            logger.debug("Pending timesheet lookup found data: %s.", bool(pending_timesheet))
-            return pending_timesheet
-
-    def clear_pending_timesheet(self) -> None:
-        """Wipes the timesheet state after a successful check-out."""
-        with sqlite3.connect(self.db_path) as conn:
-            conn.execute("DELETE FROM pending_timesheets WHERE id = 1")
-            conn.commit()
-            logger.info("Pending timesheet cleared.")
