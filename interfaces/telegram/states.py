@@ -1,0 +1,9 @@
+from aiogram.fsm.state import State, StatesGroup
+
+class TimesheetState(StatesGroup):
+    waiting_for_task_name = State()
+    waiting_for_task_details = State()
+    waiting_for_mentor = State()
+
+class SkipState(StatesGroup):
+    waiting_for_date = State()
