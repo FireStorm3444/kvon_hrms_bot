@@ -36,7 +36,7 @@ def run_workflow(action: AttendanceAction, is_automated: bool):
         return
 
     # 2. Weekend Check
-    if datetime.today().weekday() > 4:  # 5 = Saturday, 6 = Sunday
+    if datetime.today().weekday() > 5:  # 5 = Saturday, 6 = Sunday
         logger.info("Weekend detected. Skipping execution.")
         notifier.send_alert("Weekend detected. Automated attendance skipped.")
         return
