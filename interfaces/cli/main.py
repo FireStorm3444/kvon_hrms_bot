@@ -13,6 +13,8 @@ from services.notifier import NotificationService
 setup_logging()
 logger = logging.getLogger(__name__)
 
+SLEEP_INTERVAL = 600  # 10 minutes in seconds
+
 def run_workflow(action: AttendanceAction, is_automated: bool):
     logger.info("Starting workflow for action=%s automated=%s.", action.value, is_automated)
     try:
@@ -43,7 +45,7 @@ def run_workflow(action: AttendanceAction, is_automated: bool):
     
     # 3. Apply organic delay for automated morning check-ins
     if is_automated:
-        delay = random.randint(0, 900)  # Up to 15 minutes
+        delay = random.randint(0, SLEEP_INTERVAL)  # Up to 10 minutes
         logger.info("Scheduled to %s after %s seconds...", action.value, delay)
         notifier.send_alert(f"Automated {action.value} will be attempted in {delay} seconds.")
         time.sleep(delay)
